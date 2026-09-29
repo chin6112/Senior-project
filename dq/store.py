@@ -8,9 +8,12 @@ CREATE TABLE IF NOT EXISTS runs (
     run_id       INTEGER PRIMARY KEY AUTOINCREMENT,
     run_at       TEXT NOT NULL,
     file_name    TEXT NOT NULL,
+    file_hash    TEXT,
+    dataset      TEXT NOT NULL DEFAULT 'orders',
     rows_checked INTEGER NOT NULL,
     rows_failed  INTEGER NOT NULL,
-    pass_rate    REAL NOT NULL
+    pass_rate    REAL NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'UNKNOWN'
 );
 CREATE TABLE IF NOT EXISTS rule_results (
     run_id       INTEGER NOT NULL,
@@ -28,15 +31,15 @@ def connect(path="dq_history.db"):
     return conn
 
 
-def save_run(conn, file_name, rows_checked, failures):
+def save_run(conn, file_name, rows_checked, failures, file_hash=None, status="UNKNOWN"):
     rows_failed = failures["csv_row"].nunique() if not failures.empty else 0
     pass_rate = 1 - (rows_failed / rows_checked) if rows_checked else 1.0
 
     cur = conn.execute(
-        "INSERT INTO runs (run_at, file_name, rows_checked, rows_failed, pass_rate)"
-        " VALUES (?, ?, ?, ?, ?)",
-        (datetime.now(timezone.utc).isoformat(), file_name,
-         rows_checked, rows_failed, pass_rate),
+        "INSERT INTO runs (run_at, file_name, file_hash, dataset, rows_checked, rows_failed, pass_rate, status)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (datetime.now(timezone.utc).isoformat(), file_name, file_hash, "orders",
+         rows_checked, rows_failed, pass_rate, status),
     )
     run_id = cur.lastrowid
 
@@ -52,7 +55,7 @@ def save_run(conn, file_name, rows_checked, failures):
 
 def history(conn, limit=50):
     return pd.read_sql_query(
-        "SELECT run_at, file_name, rows_checked, rows_failed, pass_rate"
+        "SELECT run_at, file_name, dataset, rows_checked, rows_failed, pass_rate, status"
         " FROM runs ORDER BY run_id DESC LIMIT ?",
         conn,
         params=(limit,)

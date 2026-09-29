@@ -1,10 +1,7 @@
 import pandas as pd
 import streamlit as st
-import io
-import hashlib
-from pathlib import Path
-from dq.engine import run_checks, load_config
-from dq.store import connect, save_run, history
+from dq.service import ValidationService
+from dq.store import connect, history
 
 
 RULE_LABELS = {
@@ -12,6 +9,12 @@ RULE_LABELS = {
     "duplicate_id": "Duplicate order_id",
     "invalid_date": "Invalid order_date",
     "invalid_amount": "Missing, invalid, or negative amount",
+}
+
+STATUS_COLORS = {
+    "PASS": "🟢",
+    "WARN": "🟡",
+    "FAIL": "🔴",
 }
 
 
@@ -31,66 +34,53 @@ with tab1:
     if uploaded_file is None:
         st.info("Choose a CSV with order_id, order_date, and amount columns to begin.")
     else:
-        try:
-            raw_data = uploaded_file.getvalue()
-            file_hash = hashlib.sha256(raw_data).hexdigest()
-            orders = pd.read_csv(io.BytesIO(raw_data))
-        except Exception as exc:
-            st.error(f"Cannot read CSV: {exc}")
-            orders = None
+        service = ValidationService()
+        result = service.process_file(uploaded_file.getvalue(), uploaded_file.name)
+        service.close()
 
-        if orders is not None:
-            config = load_config()
-            missing_columns, failures = run_checks(orders, config)
+        if not result["success"]:
+            st.error(result["error"])
+        else:
+            data = result["data"]
+            status = data["status"]
+            failures = data["failures"]
 
-            if missing_columns:
-                st.error(f"Missing required columns: {', '.join(sorted(missing_columns))}")
+            st.subheader(f"{STATUS_COLORS.get(status, '❓')} Status: {status}")
+
+            first, second, third = st.columns(3)
+            first.metric("Rows checked", data["rows_checked"])
+            second.metric("Rows with issues", data["rows_failed"])
+            third.metric("Critical failures", data["critical_count"])
+
+            if failures.empty:
+                st.success("All rows passed the checks.")
             else:
-                rows_with_issues = int(failures["csv_row"].nunique())
-                total_issues = len(failures)
-                critical_issues = len(failures[failures["severity"] == "critical"])
+                if status == "FAIL":
+                    st.error("❌ File contains critical issues. Review and fix before processing.")
+                elif status == "WARN":
+                    st.warning("⚠️ File has issues. Review the details below.")
 
-                first, second, third = st.columns(3)
-                first.metric("Rows checked", len(orders))
-                second.metric("Rows with issues", rows_with_issues)
-                third.metric("Critical failures", critical_issues)
+                st.subheader("Failures by rule")
+                rule_counts = failures.groupby("rule").size().sort_values(ascending=False)
+                st.bar_chart(rule_counts)
 
-                if "last_saved" not in st.session_state:
-                    st.session_state["last_saved"] = None
+                st.subheader("Rows to review")
+                display_failures = failures.copy()
+                display_failures["rule"] = display_failures["rule"].map(RULE_LABELS)
+                st.dataframe(
+                    display_failures.sort_values(["csv_row", "rule"]),
+                    hide_index=True,
+                    use_container_width=True
+                )
 
-                if st.session_state.get("last_saved") != file_hash:
-                    db = connect()
-                    save_run(db, uploaded_file.name, len(orders), failures)
-                    db.close()
-                    st.session_state["last_saved"] = file_hash
+                st.download_button(
+                    "Download failure report",
+                    data=failures.to_csv(index=False).encode("utf-8"),
+                    file_name="order_quality_failures.csv",
+                    mime="text/csv",
+                )
 
-                if failures.empty:
-                    st.success("All rows passed the checks.")
-                else:
-                    if critical_issues > 0:
-                        st.warning(f"⚠️ {critical_issues} critical issue(s) found. Review before proceeding.")
-
-                    st.subheader("Failures by rule")
-                    rule_counts = failures.groupby("rule").size().sort_values(ascending=False)
-                    st.bar_chart(rule_counts)
-
-                    st.subheader("Rows to review")
-                    display_failures = failures.copy()
-                    display_failures["rule"] = display_failures["rule"].map(RULE_LABELS)
-                    st.dataframe(
-                        display_failures.sort_values(["csv_row", "rule"]),
-                        hide_index=True,
-                        use_container_width=True
-                    )
-
-                    st.download_button(
-                        "Download failure report",
-                        data=failures.to_csv(index=False).encode("utf-8"),
-                        file_name="order_quality_failures.csv",
-                        mime="text/csv",
-                    )
-
-                st.caption("CSV row numbers count the header as row 1; quoted multiline records may shift physical line numbers.")
+            st.caption("CSV row numbers count the header as row 1; quoted multiline records may shift physical line numbers.")
 
 with tab2:
     st.subheader("Monitoring History")
@@ -105,10 +95,11 @@ with tab2:
 
         col1, col2 = st.columns(2)
         with col1:
+            latest = hist.iloc[0]
             st.metric(
                 "Latest pass rate",
-                f"{hist.iloc[0]['pass_rate']:.1%}",
-                f"{hist.iloc[0]['rows_failed']} rows with issues"
+                f"{latest['pass_rate']:.1%}",
+                f"{int(latest['rows_failed'])} rows with issues"
             )
         with col2:
             avg_pass_rate = hist["pass_rate"].mean()

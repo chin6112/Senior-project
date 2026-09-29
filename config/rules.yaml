@@ -21,3 +21,7 @@ rules:
     check: numeric_min
     min: 0
     severity: critical
+thresholds:
+  min_pass_rate: 0.95
+  max_critical_failures: 0
+  max_warning_failures: 10
