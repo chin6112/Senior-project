@@ -1,0 +1,23 @@
+dataset: orders
+required_columns:
+  - order_id
+  - order_date
+  - amount
+rules:
+  - name: missing_id
+    column: order_id
+    check: not_null
+    severity: critical
+  - name: duplicate_id
+    column: order_id
+    check: unique
+    severity: critical
+  - name: invalid_date
+    column: order_date
+    check: parseable_date
+    severity: warning
+  - name: invalid_amount
+    column: amount
+    check: numeric_min
+    min: 0
+    severity: critical

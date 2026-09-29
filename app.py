@@ -1,8 +1,9 @@
 import pandas as pd
 import streamlit as st
+from dq.engine import run_checks, load_config
+from dq.store import connect, save_run, history
 
 
-REQUIRED_COLUMNS = {"order_id", "order_date", "amount"}
 RULE_LABELS = {
     "missing_id": "Missing order_id",
     "duplicate_id": "Duplicate order_id",
@@ -11,75 +12,111 @@ RULE_LABELS = {
 }
 
 
-def validate_orders(df: pd.DataFrame) -> tuple[set[str], pd.DataFrame]:
-    missing_columns = REQUIRED_COLUMNS - set(df.columns)
-    if missing_columns:
-        return missing_columns, pd.DataFrame()
-
-    order_ids = df["order_id"].astype("string").str.strip()
-    dates = pd.to_datetime(df["order_date"], errors="coerce")
-    amounts = pd.to_numeric(df["amount"], errors="coerce")
-    checks = pd.DataFrame(
-        {
-            "missing_id": order_ids.isna() | order_ids.eq(""),
-            "duplicate_id": order_ids.duplicated(keep=False)
-            & order_ids.notna()
-            & order_ids.ne(""),
-            "invalid_date": dates.isna(),
-            "invalid_amount": amounts.isna() | amounts.lt(0),
-        },
-        index=df.index,
-    ).fillna(False)
-
-    failures = checks.copy()
-    failures.insert(0, "csv_row", df.index + 2)
-    failures = failures.melt(
-        id_vars="csv_row", var_name="rule", value_name="failed"
-    )
-    failures = failures.loc[failures["failed"]].drop(columns="failed")
-    failures["rule"] = failures["rule"].map(RULE_LABELS)
-    return set(), failures
-
-
-st.set_page_config(page_title="Order CSV Quality Monitor", page_icon=":bar_chart:", layout="wide")
+st.set_page_config(
+    page_title="Order CSV Quality Monitor",
+    page_icon=":bar_chart:",
+    layout="wide"
+)
 st.title("Order CSV Quality Monitor")
-st.write("Upload an orders CSV to find missing, duplicate, or invalid values.")
 
-uploaded_file = st.file_uploader("Upload orders.csv", type="csv")
-if uploaded_file is None:
-    st.info("Choose a CSV with order_id, order_date, and amount columns to begin.")
-    st.stop()
+tab1, tab2 = st.tabs(["Validate", "History"])
 
-try:
-    orders = pd.read_csv(uploaded_file)
-except Exception as exc:
-    st.error(f"Cannot read CSV: {exc}")
-    st.stop()
+with tab1:
+    st.write("Upload an orders CSV to find missing, duplicate, or invalid values.")
 
-missing_columns, failures = validate_orders(orders)
-if missing_columns:
-    st.error(f"Missing required columns: {', '.join(sorted(missing_columns))}")
-    st.stop()
+    uploaded_file = st.file_uploader("Upload orders.csv", type="csv")
+    if uploaded_file is None:
+        st.info("Choose a CSV with order_id, order_date, and amount columns to begin.")
+        st.stop()
 
-rows_with_issues = int(failures["csv_row"].nunique())
-total_issues = len(failures)
-first, second, third = st.columns(3)
-first.metric("Rows checked", len(orders))
-second.metric("Rows with issues", rows_with_issues)
-third.metric("Total rule failures", total_issues)
+    try:
+        orders = pd.read_csv(uploaded_file)
+    except Exception as exc:
+        st.error(f"Cannot read CSV: {exc}")
+        st.stop()
 
-if failures.empty:
-    st.success("All rows passed the checks.")
-else:
-    st.subheader("Failures by rule")
-    st.bar_chart(failures["rule"].value_counts())
-    st.subheader("Rows to review")
-    st.dataframe(failures.sort_values(["csv_row", "rule"]), hide_index=True)
-    st.download_button(
-        "Download failure report",
-        data=failures.to_csv(index=False).encode("utf-8"),
-        file_name="order_quality_failures.csv",
-        mime="text/csv",
-    )
+    config = load_config()
+    missing_columns, failures = run_checks(orders, config)
 
-st.caption("CSV row numbers count the header as row 1; quoted multiline records may shift physical line numbers.")
+    if missing_columns:
+        st.error(f"Missing required columns: {', '.join(sorted(missing_columns))}")
+        st.stop()
+
+    rows_with_issues = int(failures["csv_row"].nunique())
+    total_issues = len(failures)
+    critical_issues = len(failures[failures["severity"] == "critical"])
+
+    first, second, third = st.columns(3)
+    first.metric("Rows checked", len(orders))
+    second.metric("Rows with issues", rows_with_issues)
+    third.metric("Critical failures", critical_issues)
+
+    db = connect()
+    save_run(db, uploaded_file.name, len(orders), failures)
+    db.close()
+
+    if failures.empty:
+        st.success("All rows passed the checks.")
+    else:
+        if critical_issues > 0:
+            st.warning(f"⚠️ {critical_issues} critical issue(s) found. Review before proceeding.")
+
+        st.subheader("Failures by rule")
+        rule_counts = failures.groupby("rule").size().sort_values(ascending=False)
+        st.bar_chart(rule_counts)
+
+        st.subheader("Rows to review")
+        display_failures = failures.copy()
+        display_failures["rule"] = display_failures["rule"].map(RULE_LABELS)
+        st.dataframe(
+            display_failures.sort_values(["csv_row", "rule"]),
+            hide_index=True,
+            use_container_width=True
+        )
+
+        st.download_button(
+            "Download failure report",
+            data=failures.to_csv(index=False).encode("utf-8"),
+            file_name="order_quality_failures.csv",
+            mime="text/csv",
+        )
+
+    st.caption("CSV row numbers count the header as row 1; quoted multiline records may shift physical line numbers.")
+
+with tab2:
+    st.subheader("Monitoring History")
+    db = connect()
+    hist = history(db)
+    db.close()
+
+    if hist.empty:
+        st.info("No validation runs yet. Upload a CSV in the Validate tab to start tracking history.")
+    else:
+        st.write(f"Total runs: {len(hist)}")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric(
+                "Latest pass rate",
+                f"{hist.iloc[0]['pass_rate']:.1%}",
+                f"{hist.iloc[0]['rows_failed']} rows with issues"
+            )
+        with col2:
+            avg_pass_rate = hist["pass_rate"].mean()
+            st.metric("Average pass rate", f"{avg_pass_rate:.1%}")
+
+        hist_display = hist.copy()
+        hist_display["run_at"] = pd.to_datetime(hist_display["run_at"]).dt.strftime("%Y-%m-%d %H:%M:%S")
+        hist_display["pass_rate"] = hist_display["pass_rate"].apply(lambda x: f"{x:.1%}")
+        st.subheader("Run history")
+        st.dataframe(hist_display, hide_index=True, use_container_width=True)
+
+        st.subheader("Pass rate trend")
+        hist_trend = hist.copy()
+        hist_trend["run_at"] = pd.to_datetime(hist_trend["run_at"])
+        hist_trend = hist_trend.sort_values("run_at")
+        st.line_chart(
+            hist_trend.set_index("run_at")[["pass_rate"]],
+            use_container_width=True,
+            height=400
+        )
