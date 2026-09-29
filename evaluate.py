@@ -10,6 +10,7 @@ from dq.engine import run_checks, load_config
 CONFIG = load_config()
 LABELED_DATA = Path(__file__).parent / "data" / "labeled" / "orders_labeled.csv"
 
+
 def evaluate():
     df = pd.read_csv(LABELED_DATA)
 
@@ -26,8 +27,8 @@ def evaluate():
     df["expected_set"] = df["expected_rules"].map(lambda x: set(x.split("|")) if x != "clean" else set())
 
     metrics_by_rule = {}
-    for rule_name in CONFIG["rules"]:
-        name = rule_name["name"]
+    for rule_config in CONFIG["rules"]:
+        name = rule_config["name"]
         expected_set = set()
         detected_set = set()
 
@@ -42,45 +43,62 @@ def evaluate():
         fp = len(detected_set - expected_set)
         fn = len(expected_set - detected_set)
 
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 1.0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 1.0
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 1.0 if tp == 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 1.0 if tp == 0 else 0.0
         f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
         metrics_by_rule[name] = {
-            "true_positives": tp,
-            "false_positives": fp,
-            "false_negatives": fn,
+            "expected": len(expected_set),
+            "detected": len(detected_set),
+            "tp": tp,
+            "fp": fp,
+            "fn": fn,
             "precision": precision,
             "recall": recall,
-            "f1_score": f1,
+            "f1": f1,
         }
 
-    results_df = pd.DataFrame(metrics_by_rule).T
-    results_df = results_df.round(3)
+    results_df = pd.DataFrame(metrics_by_rule).T.round(3)
 
-    print("\n" + "=" * 80)
-    print("DATA QUALITY VALIDATION EVALUATION")
-    print("=" * 80)
-    print(f"Test dataset: {LABELED_DATA}")
-    print(f"Total rows: {len(df)}")
-    print(f"Rows with issues: {len(df[df['expected_rules'] != 'clean'])}")
-    print(f"Clean rows: {len(df[df['expected_rules'] == 'clean'])}")
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 100)
+    print("DATA QUALITY VALIDATION EVALUATION REPORT".center(100))
+    print("=" * 100)
+    print(f"Test Dataset: {LABELED_DATA.name}")
+    print(f"Total Rows: {len(df)} | Rows with Issues: {len(df[df['expected_rules'] != 'clean'])} | Clean Rows: {len(df[df['expected_rules'] == 'clean'])}")
+    print("\n" + "=" * 100)
     print("PER-RULE METRICS")
-    print("=" * 80)
-    print(results_df.to_string())
-    print("\n" + "=" * 80)
-    print("SUMMARY")
-    print("=" * 80)
-    print(f"Macro-average Precision: {results_df['precision'].mean():.3f}")
-    print(f"Macro-average Recall:    {results_df['recall'].mean():.3f}")
-    print(f"Macro-average F1-Score:  {results_df['f1_score'].mean():.3f}")
-    print("=" * 80 + "\n")
+    print("=" * 100)
 
-    results_df.to_csv(Path(__file__).parent.parent / "evaluation_results.csv")
-    print(f"Results saved to evaluation_results.csv")
+    display_cols = ["expected", "detected", "tp", "fp", "fn", "precision", "recall", "f1"]
+    print(results_df[display_cols].to_string())
+
+    print("\n" + "=" * 100)
+    print("SUMMARY STATISTICS")
+    print("=" * 100)
+    print(f"Macro-average Precision:  {results_df['precision'].mean():.3f}")
+    print(f"Macro-average Recall:     {results_df['recall'].mean():.3f}")
+    print(f"Macro-average F1-Score:   {results_df['f1'].mean():.3f}")
+    print("=" * 100)
+
+    results_df.to_csv(Path(__file__).parent / "evaluation_results.csv")
+    print(f"\nResults saved to: evaluation_results.csv\n")
 
     return results_df
+
+
+def get_evaluation_summary():
+    """Return dict for Streamlit display"""
+    try:
+        results = pd.read_csv(Path(__file__).parent / "evaluation_results.csv", index_col=0)
+        return {
+            "macro_precision": results["precision"].mean(),
+            "macro_recall": results["recall"].mean(),
+            "macro_f1": results["f1"].mean(),
+            "results": results,
+        }
+    except FileNotFoundError:
+        return None
+
 
 if __name__ == "__main__":
     evaluate()
