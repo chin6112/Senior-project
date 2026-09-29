@@ -37,7 +37,14 @@ DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "config" / "rules.yaml
 
 
 def load_config(path=None):
-    config_path = Path(path or DEFAULT_CONFIG)
+    if path is None:
+        config_path = DEFAULT_CONFIG
+    else:
+        config_path = Path(path)
+
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
     with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
