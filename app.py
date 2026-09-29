@@ -1,5 +1,8 @@
 import pandas as pd
 import streamlit as st
+import io
+import hashlib
+from pathlib import Path
 from dq.engine import run_checks, load_config
 from dq.store import connect, save_run, history
 
@@ -27,61 +30,67 @@ with tab1:
     uploaded_file = st.file_uploader("Upload orders.csv", type="csv")
     if uploaded_file is None:
         st.info("Choose a CSV with order_id, order_date, and amount columns to begin.")
-        st.stop()
-
-    try:
-        orders = pd.read_csv(uploaded_file)
-    except Exception as exc:
-        st.error(f"Cannot read CSV: {exc}")
-        st.stop()
-
-    config = load_config()
-    missing_columns, failures = run_checks(orders, config)
-
-    if missing_columns:
-        st.error(f"Missing required columns: {', '.join(sorted(missing_columns))}")
-        st.stop()
-
-    rows_with_issues = int(failures["csv_row"].nunique())
-    total_issues = len(failures)
-    critical_issues = len(failures[failures["severity"] == "critical"])
-
-    first, second, third = st.columns(3)
-    first.metric("Rows checked", len(orders))
-    second.metric("Rows with issues", rows_with_issues)
-    third.metric("Critical failures", critical_issues)
-
-    db = connect()
-    save_run(db, uploaded_file.name, len(orders), failures)
-    db.close()
-
-    if failures.empty:
-        st.success("All rows passed the checks.")
     else:
-        if critical_issues > 0:
-            st.warning(f"⚠️ {critical_issues} critical issue(s) found. Review before proceeding.")
+        try:
+            raw_data = uploaded_file.getvalue()
+            file_hash = hashlib.sha256(raw_data).hexdigest()
+            orders = pd.read_csv(io.BytesIO(raw_data))
+        except Exception as exc:
+            st.error(f"Cannot read CSV: {exc}")
+            orders = None
 
-        st.subheader("Failures by rule")
-        rule_counts = failures.groupby("rule").size().sort_values(ascending=False)
-        st.bar_chart(rule_counts)
+        if orders is not None:
+            config = load_config()
+            missing_columns, failures = run_checks(orders, config)
 
-        st.subheader("Rows to review")
-        display_failures = failures.copy()
-        display_failures["rule"] = display_failures["rule"].map(RULE_LABELS)
-        st.dataframe(
-            display_failures.sort_values(["csv_row", "rule"]),
-            hide_index=True,
-            use_container_width=True
-        )
+            if missing_columns:
+                st.error(f"Missing required columns: {', '.join(sorted(missing_columns))}")
+            else:
+                rows_with_issues = int(failures["csv_row"].nunique())
+                total_issues = len(failures)
+                critical_issues = len(failures[failures["severity"] == "critical"])
 
-        st.download_button(
-            "Download failure report",
-            data=failures.to_csv(index=False).encode("utf-8"),
-            file_name="order_quality_failures.csv",
-            mime="text/csv",
-        )
+                first, second, third = st.columns(3)
+                first.metric("Rows checked", len(orders))
+                second.metric("Rows with issues", rows_with_issues)
+                third.metric("Critical failures", critical_issues)
 
-    st.caption("CSV row numbers count the header as row 1; quoted multiline records may shift physical line numbers.")
+                if "last_saved" not in st.session_state:
+                    st.session_state["last_saved"] = None
+
+                if st.session_state.get("last_saved") != file_hash:
+                    db = connect()
+                    save_run(db, uploaded_file.name, len(orders), failures)
+                    db.close()
+                    st.session_state["last_saved"] = file_hash
+
+                if failures.empty:
+                    st.success("All rows passed the checks.")
+                else:
+                    if critical_issues > 0:
+                        st.warning(f"⚠️ {critical_issues} critical issue(s) found. Review before proceeding.")
+
+                    st.subheader("Failures by rule")
+                    rule_counts = failures.groupby("rule").size().sort_values(ascending=False)
+                    st.bar_chart(rule_counts)
+
+                    st.subheader("Rows to review")
+                    display_failures = failures.copy()
+                    display_failures["rule"] = display_failures["rule"].map(RULE_LABELS)
+                    st.dataframe(
+                        display_failures.sort_values(["csv_row", "rule"]),
+                        hide_index=True,
+                        use_container_width=True
+                    )
+
+                    st.download_button(
+                        "Download failure report",
+                        data=failures.to_csv(index=False).encode("utf-8"),
+                        file_name="order_quality_failures.csv",
+                        mime="text/csv",
+                    )
+
+                st.caption("CSV row numbers count the header as row 1; quoted multiline records may shift physical line numbers.")
 
 with tab2:
     st.subheader("Monitoring History")

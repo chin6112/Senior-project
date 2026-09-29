@@ -30,8 +30,11 @@ CHECKS = {
 }
 
 
-def load_config(path="config/rules.yaml"):
-    config_path = Path(path)
+DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "config" / "rules.yaml"
+
+
+def load_config(path=None):
+    config_path = Path(path or DEFAULT_CONFIG)
     with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 

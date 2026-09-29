@@ -1,9 +1,11 @@
 import pandas as pd
 import pytest
+from pathlib import Path
 from dq.engine import run_checks, load_config
 
 
 CONFIG = load_config()
+DATA_DIR = Path(__file__).resolve().parent.parent
 
 
 def test_detects_missing_id():
@@ -67,7 +69,8 @@ def test_missing_required_columns():
 
 
 def test_detects_all_issues_in_sample_file():
-    df = pd.read_csv("orders_with_issues.csv")
+    sample_file = DATA_DIR / "orders_with_issues.csv"
+    df = pd.read_csv(sample_file)
     _, failures = run_checks(df, CONFIG)
     found = set(zip(failures["csv_row"], failures["rule"]))
 
