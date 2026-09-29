@@ -24,10 +24,14 @@ def generate_realistic_dataset(n_rows=200):
         # Pattern 1: Every 50th row missing ID (data entry skip)
         if i % 50 == 0:
             issues.add("missing_id")
+            order_id = ""
+        else:
+            order_id = f"ORD-{1000 + i}"
 
         # Pattern 2: Exact duplicates (data loading glitch)
         if i % 60 == 0 and i > 60:
             issues.add("duplicate_id")
+            order_id = f"ORD-{1000 + (i-1)}"
 
         # Pattern 3: Invalid dates (user typos, format mismatch)
         if i % 55 == 0:
@@ -41,22 +45,12 @@ def generate_realistic_dataset(n_rows=200):
         if i % 45 == 0:
             bad_amounts = ["-50.00", "-1.5", "", "abc", "999999.99"]
             amount = bad_amounts[random.randint(0, 4)]
-            if amount not in ["", "abc"]:
+            if amount in ["-50.00", "-1.5", ""]:
                 issues.add("invalid_amount")
             else:
                 issues.add("invalid_amount")
         else:
             amount = f"{random.uniform(5, 500):.2f}"
-
-        # Pattern 5: Realistic data with spaces/typos in ID
-        if i % 70 == 0:
-            order_id = f"  ORD-{1000+i}  "
-            issues.add("missing_id")
-        elif i % 75 == 0:
-            order_id = f"ORD-{1000 + (i-1)}"
-            issues.add("duplicate_id")
-        else:
-            order_id = f"ORD-{1000 + i}" if not issues else order_date
 
         rows.append({
             "order_id": order_id,

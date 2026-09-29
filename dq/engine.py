@@ -10,7 +10,10 @@ def _not_null(s):
 
 def _unique(s):
     v = s.astype("string").str.strip()
-    return v.duplicated(keep=False) & v.notna() & v.ne("")
+    # Only flag as duplicate if it's non-empty AND appears more than once
+    is_blank = v.isna() | v.eq("")
+    duplicated_mask = v.duplicated(keep=False)
+    return duplicated_mask & ~is_blank
 
 
 def _parseable_date(s):

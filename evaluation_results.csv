@@ -1,5 +1,5 @@
 ,expected,detected,tp,fp,fn,precision,recall,f1
-missing_id,6.0,0.0,0.0,0.0,6.0,1.0,0.0,0.0
-duplicate_id,4.0,11.0,4.0,7.0,0.0,0.364,1.0,0.533
+missing_id,4.0,4.0,4.0,0.0,0.0,1.0,1.0,1.0
+duplicate_id,2.0,4.0,2.0,2.0,0.0,0.5,1.0,0.667
 invalid_date,3.0,3.0,3.0,0.0,0.0,1.0,1.0,1.0
 invalid_amount,4.0,3.0,3.0,0.0,1.0,1.0,0.75,0.857
