@@ -87,17 +87,20 @@ def evaluate():
 
 
 def get_evaluation_summary():
-    """Return dict for Streamlit display"""
+    """Return dict for Streamlit display. Compute on-the-fly if results file doesn't exist."""
+    results_path = Path(__file__).parent / "evaluation_results.csv"
     try:
-        results = pd.read_csv(Path(__file__).parent / "evaluation_results.csv", index_col=0)
-        return {
-            "macro_precision": results["precision"].mean(),
-            "macro_recall": results["recall"].mean(),
-            "macro_f1": results["f1"].mean(),
-            "results": results,
-        }
+        results = pd.read_csv(results_path, index_col=0)
     except FileNotFoundError:
-        return None
+        # Compute evaluation on-the-fly for Streamlit Cloud deployment
+        results = evaluate()
+
+    return {
+        "macro_precision": results["precision"].mean(),
+        "macro_recall": results["recall"].mean(),
+        "macro_f1": results["f1"].mean(),
+        "results": results,
+    }
 
 
 if __name__ == "__main__":

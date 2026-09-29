@@ -132,53 +132,49 @@ with tab3:
         from evaluate import get_evaluation_summary
         summary = get_evaluation_summary()
 
-        if summary:
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric(
-                    "Macro Precision",
-                    f"{summary['macro_precision']:.1%}",
-                    help="Average % of detected issues that are actually issues"
-                )
-            with col2:
-                st.metric(
-                    "Macro Recall",
-                    f"{summary['macro_recall']:.1%}",
-                    help="Average % of real issues that we successfully detect"
-                )
-            with col3:
-                st.metric(
-                    "Macro F1-Score",
-                    f"{summary['macro_f1']:.1%}",
-                    help="Harmonic mean of precision and recall"
-                )
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric(
+                "Macro Precision",
+                f"{summary['macro_precision']:.1%}",
+                help="Average % of detected issues that are actually issues"
+            )
+        with col2:
+            st.metric(
+                "Macro Recall",
+                f"{summary['macro_recall']:.1%}",
+                help="Average % of real issues that we successfully detect"
+            )
+        with col3:
+            st.metric(
+                "Macro F1-Score",
+                f"{summary['macro_f1']:.1%}",
+                help="Harmonic mean of precision and recall"
+            )
 
-            st.subheader("Per-Rule Breakdown")
-            results_df = summary["results"][["expected", "detected", "tp", "fp", "fn", "precision", "recall", "f1"]]
-            st.dataframe(results_df.round(3), use_container_width=True)
+        st.subheader("Per-Rule Breakdown")
+        results_df = summary["results"][["expected", "detected", "tp", "fp", "fn", "precision", "recall", "f1"]]
+        st.dataframe(results_df.round(3), use_container_width=True)
 
-            st.subheader("Interpretation")
-            if summary["macro_f1"] > 0.8:
-                st.success("✅ Validation rules are highly accurate")
-            elif summary["macro_f1"] > 0.6:
-                st.warning("⚠️ Validation rules are reasonably accurate but have room for improvement")
-            else:
-                st.error("❌ Validation rules need refinement")
-
-            st.write("""
-            **Precision**: Of all issues we flag, how many are real?
-            - High precision = few false alarms
-            - Low precision = we're catching noise
-
-            **Recall**: Of all real issues, how many do we catch?
-            - High recall = we find most problems
-            - Low recall = we miss some problems
-
-            **F1-Score**: Balance between precision and recall
-            """)
+        st.subheader("Interpretation")
+        if summary["macro_f1"] > 0.8:
+            st.success("✅ Validation rules are highly accurate")
+        elif summary["macro_f1"] > 0.6:
+            st.warning("⚠️ Validation rules are reasonably accurate but have room for improvement")
         else:
-            st.info("Run evaluate.py to generate metrics:")
-            st.code("python evaluate.py")
+            st.error("❌ Validation rules need refinement")
+
+        st.write("""
+        **Precision**: Of all issues we flag, how many are real?
+        - High precision = few false alarms
+        - Low precision = we're catching noise
+
+        **Recall**: Of all real issues, how many do we catch?
+        - High recall = we find most problems
+        - Low recall = we miss some problems
+
+        **F1-Score**: Balance between precision and recall
+        """)
 
     except ImportError:
         st.error("Evaluation module not available. Please ensure evaluate.py is in the project root.")

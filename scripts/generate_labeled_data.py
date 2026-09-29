@@ -29,9 +29,11 @@ def generate_realistic_dataset(n_rows=200):
             order_id = f"ORD-{1000 + i}"
 
         # Pattern 2: Exact duplicates (data loading glitch)
+        # Mark with duplicate ID but DON'T add to issues yet
+        duplicate_marker = None
         if i % 60 == 0 and i > 60:
-            issues.add("duplicate_id")
-            order_id = f"ORD-{1000 + (i-1)}"
+            duplicate_marker = f"ORD-{1000 + (i-1)}"
+            order_id = duplicate_marker
 
         # Pattern 3: Invalid dates (user typos, format mismatch)
         if i % 55 == 0:
@@ -56,10 +58,35 @@ def generate_realistic_dataset(n_rows=200):
             "order_id": order_id,
             "order_date": order_date,
             "amount": amount,
+            "_duplicate_marker": duplicate_marker,
             "expected_rules": "|".join(sorted(issues)) if issues else "clean",
         })
 
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+
+    # Second pass: Mark ALL rows with duplicate order_ids as duplicate_id
+    # (excluding empty/missing IDs)
+    seen_ids = {}
+    duplicate_ids = set()
+    for idx, row in df.iterrows():
+        order_id = row["order_id"]
+        if order_id and order_id != "":  # Skip empty IDs
+            if order_id in seen_ids:
+                duplicate_ids.add(order_id)
+            else:
+                seen_ids[order_id] = idx
+
+    # Mark ALL rows with duplicate IDs as having the duplicate_id issue
+    for idx, row in df.iterrows():
+        if row["order_id"] in duplicate_ids:
+            issues = set(row["expected_rules"].split("|")) if row["expected_rules"] != "clean" else set()
+            issues.add("duplicate_id")
+            df.at[idx, "expected_rules"] = "|".join(sorted(issues))
+
+    # Remove helper column
+    df = df.drop("_duplicate_marker", axis=1)
+
+    return df
 
 df = generate_realistic_dataset(200)
 output_path = project_root / "data" / "labeled" / "orders_labeled.csv"
