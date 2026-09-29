@@ -28,6 +28,18 @@ CREATE TABLE IF NOT EXISTS rule_results (
 def connect(path="dq_history.db"):
     conn = sqlite3.connect(path)
     conn.executescript(DDL)
+    # Migration: Add missing columns to existing databases
+    cursor = conn.execute("PRAGMA table_info(runs)")
+    existing_cols = {row[1] for row in cursor.fetchall()}
+
+    if "dataset" not in existing_cols:
+        conn.execute("ALTER TABLE runs ADD COLUMN dataset TEXT NOT NULL DEFAULT 'orders'")
+    if "status" not in existing_cols:
+        conn.execute("ALTER TABLE runs ADD COLUMN status TEXT NOT NULL DEFAULT 'UNKNOWN'")
+    if "file_hash" not in existing_cols:
+        conn.execute("ALTER TABLE runs ADD COLUMN file_hash TEXT")
+
+    conn.commit()
     return conn
 
 
