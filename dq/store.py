@@ -43,14 +43,14 @@ def connect(path="dq_history.db"):
     return conn
 
 
-def save_run(conn, file_name, rows_checked, failures, file_hash=None, status="UNKNOWN"):
+def save_run(conn, file_name, rows_checked, failures, file_hash=None, status="UNKNOWN", dataset="orders"):
     rows_failed = failures["csv_row"].nunique() if not failures.empty else 0
     pass_rate = 1 - (rows_failed / rows_checked) if rows_checked else 1.0
 
     cur = conn.execute(
         "INSERT INTO runs (run_at, file_name, file_hash, dataset, rows_checked, rows_failed, pass_rate, status)"
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (datetime.now(timezone.utc).isoformat(), file_name, file_hash, "orders",
+        (datetime.now(timezone.utc).isoformat(), file_name, file_hash, dataset,
          rows_checked, rows_failed, pass_rate, status),
     )
     run_id = cur.lastrowid

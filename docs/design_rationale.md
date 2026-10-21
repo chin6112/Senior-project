@@ -1,5 +1,7 @@
 # Design Decisions & Evaluation Notes
 
+> Note: the 88.1% F1 figures below are from an earlier labeling of the data. After aligning the labels with the rule definitions, the standard set scores F1 = 1.0. See `10_ch4_results.md` for current numbers.
+
 ## duplicate_id Rule: keep=False vs keep='last'
 
 ### The Question

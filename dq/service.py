@@ -1,6 +1,6 @@
 import pandas as pd
 from pathlib import Path
-from dq.engine import run_checks, load_config
+from dq.engine import run_checks, load_config, infer_config
 from dq.store import connect, save_run
 
 
@@ -27,7 +27,12 @@ class ValidationService:
                 "data": None,
             }
 
-        missing_cols, failures = run_checks(df, self.config)
+        config, dataset, profile = self.config, "orders", None
+        if set(config["required_columns"]) - set(df.columns):
+            config, profile = infer_config(df, self.config.get("thresholds"))
+            dataset = "generic"
+
+        missing_cols, failures = run_checks(df, config)
         if missing_cols:
             return {
                 "success": False,
@@ -37,10 +42,10 @@ class ValidationService:
 
         from dq.policy import PolicyEvaluator
 
-        policy = PolicyEvaluator(self.config)
+        policy = PolicyEvaluator(config)
         status = policy.evaluate(failures)
 
-        run_id = save_run(self.db, file_name, len(df), failures, file_hash, status)
+        run_id = save_run(self.db, file_name, len(df), failures, file_hash, status, dataset)
 
         return {
             "success": True,
@@ -51,6 +56,8 @@ class ValidationService:
                 "rows_failed": failures["csv_row"].nunique() if not failures.empty else 0,
                 "critical_count": len(failures[failures["severity"] == "critical"]),
                 "status": status,
+                "dataset": dataset,
+                "profile": profile,
                 "failures": failures,
                 "file_hash": file_hash,
             },

@@ -7,6 +7,7 @@ A production-grade data quality monitoring system that validates order CSV files
 ## Features
 
 - **Real-time validation**: Upload CSVs and get instant feedback on data quality
+- **Any CSV supported**: files with `order_id`, `order_date`, `amount` use the fixed rules; any other CSV is profiled and checked with rules inferred from its content (rare missing values, non-numeric/invalid-date values in typed columns, duplicate `id`/`*_id` keys, duplicate rows)
 - **Configurable rules**: Rules defined in YAML, no code changes needed
 - **History tracking**: All validation runs stored in SQLite with trend analysis
 - **Comprehensive checks**: Missing values, duplicates, invalid dates, negative amounts
@@ -19,21 +20,12 @@ A production-grade data quality monitoring system that validates order CSV files
 **Standard Test Set (200 rows):** All rules working as defined
 - Precision: 100% | Recall: 100% | F1-Score: **1.000**
 
-**Edge Cases (29 rows):** Boundary conditions system intentionally doesn't catch
+**Hard Set (45 rows):** Boundary values (0.00, 999999.99, far-future dates, odd ID formats) plus one fully blank row
 - Precision: 50% | Recall: 100% | F1-Score: **0.500**
-- Examples: Zero amounts, outlier values, date ranges, format variations
-- This shows honest boundaries of the current rule set
+- The only flagged row is the blank row 26: it is labeled `missing_id` only, but the engine also reports `invalid_date` and `invalid_amount` for it. All other boundary rows are labeled `clean` and are not flagged.
+- See `docs/10_ch4_results.md` for the full analysis.
 
 See `evaluate_dual.py` for methodology and future enhancement opportunities.
-
-## Features
-
-- **Real-time validation**: Upload CSVs and get instant feedback on data quality
-- **Configurable rules**: Rules defined in YAML, no code changes needed
-- **History tracking**: All validation runs stored in SQLite with trend analysis
-- **Comprehensive checks**: Missing values, duplicates, invalid dates, negative amounts
-- **Severity levels**: Distinguish between critical and warning-level issues
-- **Test coverage**: Full pytest suite for validation logic
 
 ## Project Structure
 
@@ -52,10 +44,11 @@ See `evaluate_dual.py` for methodology and future enhancement opportunities.
 │   └── labeled/                     # Labeled test set with ground truth
 ├── tests/
 │   ├── test_rules.py                # Validation rule tests
-│   ├── test_policy.py               # Policy evaluation tests
-│   └── test_store.py                # Database tests
+│   └── test_policy.py               # Policy evaluation tests
 ├── scripts/
-│   └── generate_labeled_data.py     # Generate test dataset
+│   ├── generate_labeled_data.py     # Generate standard labeled dataset
+│   └── generate_hard_cases.py       # Generate hard-case dataset
+├── docs/                            # Thesis chapters and diagrams
 ├── evaluate.py                      # Precision/recall metrics
 ├── .github/workflows/
 │   └── tests.yml                    # GitHub Actions CI/CD
@@ -141,7 +134,7 @@ rules:
 | **not_null** | Column value is not empty or whitespace |
 | **unique** | Value appears only once (ignores blanks) |
 | **parseable_date** | Value parses as a valid date |
-| **numeric_min** | Value is numeric and ≥ min (default 0) |
+| **numeric_min** | Value is numeric and >= min (default 0) |
 
 ## Database Schema
 
@@ -149,7 +142,7 @@ Two tables track history:
 
 **runs** - Summary of each validation run
 ```sql
-run_id, run_at, file_name, rows_checked, rows_failed, pass_rate
+run_id, run_at, file_name, file_hash, dataset, rows_checked, rows_failed, pass_rate, status
 ```
 
 **rule_results** - Detailed failures per rule per run
@@ -189,10 +182,7 @@ Every push runs automated tests and evaluation:
 - `evaluate.py` runs accuracy metrics
 - Results uploaded as artifact
 
-Badge shows current status:
-```markdown
-[![tests](https://github.com/your-username/your-repo/actions/workflows/tests.yml/badge.svg)](https://github.com/your-username/your-repo/actions/workflows/tests.yml)
-```
+[![tests](https://github.com/chin6112/Senior-project/actions/workflows/tests.yml/badge.svg)](https://github.com/chin6112/Senior-project/actions/workflows/tests.yml)
 
 ### Streamlit Community Cloud
 

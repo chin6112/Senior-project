@@ -11,6 +11,8 @@ RULE_LABELS = {
     "invalid_amount": "Missing, invalid, or negative amount",
 }
 
+MAX_DISPLAY_ROWS = 2000
+
 STATUS_COLORS = {
     "PASS": "🟢",
     "WARN": "🟡",
@@ -28,11 +30,11 @@ st.title("Order CSV Quality Monitor")
 tab1, tab2, tab3 = st.tabs(["Validate", "History", "Evaluation"])
 
 with tab1:
-    st.write("Upload an orders CSV to find missing, duplicate, or invalid values.")
+    st.write("Upload any CSV. Order files (order_id, order_date, amount) use the fixed rules; other files are profiled and checked with rules inferred from their content.")
 
-    uploaded_file = st.file_uploader("Upload orders.csv", type="csv")
+    uploaded_file = st.file_uploader("Upload CSV", type="csv")
     if uploaded_file is None:
-        st.info("Choose a CSV with order_id, order_date, and amount columns to begin.")
+        st.info("Choose a CSV file to begin.")
     else:
         service = ValidationService()
         result = service.process_file(uploaded_file.getvalue(), uploaded_file.name)
@@ -46,6 +48,10 @@ with tab1:
             failures = data["failures"]
 
             st.subheader(f"{STATUS_COLORS.get(status, '❓')} Status: {status}")
+            if data["dataset"] == "generic":
+                st.caption("Not an orders file: rules were inferred from the file's own columns.")
+                with st.expander("Column profile and inferred rules", expanded=True):
+                    st.dataframe(data["profile"], hide_index=True, use_container_width=True)
 
             first, second, third = st.columns(3)
             first.metric("Rows checked", data["rows_checked"])
@@ -66,12 +72,14 @@ with tab1:
 
                 st.subheader("Rows to review")
                 display_failures = failures.copy()
-                display_failures["rule"] = display_failures["rule"].map(RULE_LABELS)
+                display_failures["rule"] = display_failures["rule"].map(RULE_LABELS).fillna(display_failures["rule"])
                 st.dataframe(
-                    display_failures.sort_values(["csv_row", "rule"]),
+                    display_failures.sort_values(["csv_row", "rule"]).head(MAX_DISPLAY_ROWS),
                     hide_index=True,
                     use_container_width=True
                 )
+                if len(display_failures) > MAX_DISPLAY_ROWS:
+                    st.caption(f"Showing first {MAX_DISPLAY_ROWS:,} of {len(display_failures):,} failures; download the report for all.")
 
                 st.download_button(
                     "Download failure report",
