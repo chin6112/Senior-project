@@ -1,0 +1,23 @@
+@startuml plantuml_er_diagram
+hide circle
+entity runs {
+  * run_id : INTEGER <<PK>>
+  --
+  run_at : TEXT
+  file_name : TEXT
+  file_hash : TEXT
+  dataset : TEXT
+  rows_checked : INTEGER
+  rows_failed : INTEGER
+  pass_rate : REAL
+  status : TEXT
+}
+entity rule_results {
+  * run_id : INTEGER <<FK>>
+  * rule : TEXT
+  --
+  severity : TEXT
+  failed_count : INTEGER
+}
+runs ||--o{ rule_results : has
+@enduml

@@ -1,0 +1,27 @@
+@startuml plantuml_sequence_validate
+actor User
+participant "app.py" as A
+participant ValidationService as S
+participant engine as E
+participant PolicyEvaluator as P
+database SQLite as D
+
+User -> A : upload CSV
+A -> S : process_file(bytes, name)
+S -> S : sha256, read_csv
+alt required columns missing
+  S -> E : infer_config(df)
+  E --> S : generic config, profile
+end
+S -> E : run_checks(df, config)
+E --> S : missing columns, failures
+alt missing required columns
+  S --> A : error
+else
+  S -> P : evaluate(failures)
+  P --> S : PASS / WARN / FAIL
+  S -> D : save_run(...)
+  S --> A : result dict
+  A --> User : status, metrics, failures
+end
+@enduml

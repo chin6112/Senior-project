@@ -49,6 +49,7 @@ See `evaluate_dual.py` for methodology and future enhancement opportunities.
 │   ├── generate_labeled_data.py     # Generate standard labeled dataset
 │   └── generate_hard_cases.py       # Generate hard-case dataset
 ├── docs/                            # Thesis chapters and diagrams
+│   └── chapter3_system_design.md    # Three-tier architecture, requirements, screens, DB
 ├── evaluate.py                      # Precision/recall metrics
 ├── .github/workflows/
 │   └── tests.yml                    # GitHub Actions CI/CD
@@ -81,9 +82,10 @@ Upload sample files from `data/samples/`:
 pytest tests/ -v
 ```
 
-13 tests validate:
+19 tests validate:
 - **Rule logic** (7 tests): Each validation check (missing_id, duplicate_id, invalid_date, invalid_amount)
 - **Policy logic** (6 tests): PASS/WARN/FAIL decision boundaries and thresholds
+- **Generic CSV** (6 tests): Inferred rules and fallback for non-order files
 
 ### Evaluation: Dual Test Sets
 
@@ -96,7 +98,7 @@ python evaluate_dual.py
 ```
 
 **Standard test set** (200 rows): Validates rules work as coded → F1=1.0
-**Edge cases** (29 rows): Validates understanding of rule boundaries → F1=0.5
+**Edge cases** (45 rows): Validates understanding of rule boundaries → F1=0.5
 
 The gap between perfect (F1=1.0) and realistic (F1=0.5) represents opportunities for future enhancements:
 
@@ -178,7 +180,7 @@ CSV row numbers in reports count the header as row 1. Multi-line records (with e
 ### GitHub Actions CI/CD
 
 Every push runs automated tests and evaluation:
-- `pytest` validates 13 tests
+- `pytest` validates 19 tests
 - `evaluate.py` runs accuracy metrics
 - Results uploaded as artifact
 

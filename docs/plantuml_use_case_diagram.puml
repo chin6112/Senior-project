@@ -1,0 +1,28 @@
+@startuml plantuml_use_case_diagram
+left to right direction
+actor "Data Analyst" as DA
+actor "Data Owner" as DO
+actor "Data Steward" as DS
+actor "Developer" as DEV
+
+rectangle "Order CSV Quality Monitor" {
+  usecase "UC-01 Validate Order File" as UC1
+  usecase "UC-02 View Error Details" as UC2
+  usecase "UC-03 Download Failure Report" as UC3
+  usecase "UC-04 View Quality Trends" as UC4
+  usecase "UC-05 Edit Rules and Thresholds" as UC5
+  usecase "UC-06 Evaluate Rule Accuracy" as UC6
+  usecase "Profile Generic CSV" as UCG
+}
+
+DA --> UC1
+DA --> UC2
+DA --> UC3
+DA --> UC4
+DO --> UC3
+DS --> UC5
+DEV --> UC6
+UC2 ..> UC1 : <<include>>
+UC3 ..> UC1 : <<include>>
+UCG ..> UC1 : <<extend>>
+@enduml

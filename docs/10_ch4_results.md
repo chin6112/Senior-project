@@ -4,7 +4,7 @@ All numbers below were produced by `python evaluate_dual.py` and `pytest tests` 
 
 ## 4.1 Unit tests
 
-13 of 13 tests pass (7 rule tests, 6 policy tests).
+19 of 19 tests pass (7 rule tests, 6 policy tests, 6 generic-CSV tests).
 
 ## 4.2 Standard labeled set (`data/labeled/orders_labeled.csv`, 200 rows)
 
