@@ -1,16 +1,56 @@
 # Diagrams
 
-## Architecture (config -> engine -> policy -> store)
+## System Architecture
+
+```mermaid
+flowchart TD
+    subgraph "Frontend"
+        UI[Streamlit Dashboard]
+        API[FastAPI Swagger UI]
+    end
+    
+    subgraph "Core Services"
+        SVC[ValidationService]
+        ANOMALY[AnomalyDetector]
+        ALERT[AlertService]
+    end
+    
+    subgraph "Configuration"
+        CFG[config/rules.yaml]
+        ALERTCFG[config/alert_config.yaml]
+    end
+    
+    subgraph "Storage"
+        DB[(SQLite dq_history.db)]
+        ANOMALY_DB[(anomaly_results.db)]
+    end
+    
+    UI -->|file upload| SVC
+    API -->|REST API| SVC
+    CFG --> SVC
+    SVC --> ANOMALY
+    ANOMALY --> ANOMALY_DB
+    ALERTCFG --> ALERT
+    ANOMALY -->|anomalies| ALERT
+    SVC -->|save_run| DB
+    DB -->|query history| UI
+    ALERT -->|Email/Slack/Discord| Email[External Services]
+```
+
+## Data Processing Pipeline
 
 ```mermaid
 flowchart LR
-    UI[Streamlit app.py] -->|file bytes| SVC[ValidationService]
-    CFG[config/rules.yaml] --> SVC
-    SVC --> ENG[engine.run_checks]
-    ENG -->|failures DataFrame| POL[PolicyEvaluator]
-    POL -->|PASS / WARN / FAIL| SVC
-    SVC -->|save_run| STORE[(SQLite dq_history.db)]
-    STORE -->|history / rule_trend| UI
+    A[Upload File] --> B[Read CSV]
+    B --> C{Validate Schema}
+    C -->|Missing Cols| D[Skip Anomaly]
+    C -->|Valid| E[Run Checks]
+    E --> F[Detect Anomalies]
+    F --> G{Alert Needed?}
+    G -->|Yes| H[Send Alert]
+    G -->|No| I[Save History]
+    H --> I
+    I --> J[Display Results]
 ```
 
 ## Class diagram
